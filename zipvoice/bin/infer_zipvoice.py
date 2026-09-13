@@ -378,8 +378,13 @@ def generate_sentence_raw_evaluation(
     prompt_features_lens = torch.tensor([prompt_features.size(1)], device=device)
 
     # Convert text to tokens
-    tokens = tokenizer.texts_to_token_ids([text])
-    prompt_tokens = tokenizer.texts_to_token_ids([prompt_text])
+    tokens_str = tokenizer.texts_to_tokens([text])[0]
+    prompt_tokens_str = tokenizer.texts_to_tokens([prompt_text])[0]
+    logging.info(f"[SEA-G2P] Prompt phonemes: {''.join(prompt_tokens_str)}")
+    logging.info(f"[SEA-G2P] Target phonemes: {''.join(tokens_str)}")
+
+    tokens = tokenizer.tokens_to_token_ids([tokens_str])
+    prompt_tokens = tokenizer.tokens_to_token_ids([prompt_tokens_str])
 
     # Start timing
     start_t = dt.datetime.now()
@@ -533,11 +538,32 @@ def generate_sentence(
     tokens_str = tokenizer.texts_to_tokens([text])[0]
     prompt_tokens_str = tokenizer.texts_to_tokens([prompt_text])[0]
 
+    # In ra dòng phiên âm qua SEA-G2P
+    print("=" * 60)
+    print(f"[SEA-G2P] Prompt Text:     {prompt_text}")
+    print(f"[SEA-G2P] Prompt Phonemes: {''.join(prompt_tokens_str)}")
+    print(f"[SEA-G2P] Target Text:     {text}")
+    print(f"[SEA-G2P] Target Phonemes: {''.join(tokens_str)}")
+    print("=" * 60)
+
+    logging.info(f"[SEA-G2P] Prompt text: {prompt_text}")
+    logging.info(f"[SEA-G2P] Prompt phonemes: {''.join(prompt_tokens_str)}")
+    logging.info(f"[SEA-G2P] Target text: {text}")
+    logging.info(f"[SEA-G2P] Target phonemes: {''.join(tokens_str)}")
+
+    # Check for OOV tokens
+    prompt_oov = [t for t in prompt_tokens_str if t not in tokenizer.token2id]
+    target_oov = [t for t in tokens_str if t not in tokenizer.token2id]
+    if prompt_oov:
+        logging.warning(f"Warning: OOV tokens in prompt (skipped): {set(prompt_oov)}")
+    if target_oov:
+        logging.warning(f"Warning: OOV tokens in target (skipped): {set(target_oov)}")
+
     # chunk text so that each len(prompt wav + generated wav) is around 25 seconds.
     token_duration = (prompt_wav.shape[-1] / sampling_rate) / (
-        len(prompt_tokens_str) * speed
+        max(len(prompt_tokens_str), 1) * speed
     )
-    max_tokens = int((25 - prompt_duration) / token_duration)
+    max_tokens = int((25 - prompt_duration) / max(token_duration, 1e-4))
     chunked_tokens_str = chunk_tokens_punctuation(tokens_str, max_tokens=max_tokens)
 
     # Tokenize text (int tokens)
@@ -759,16 +785,35 @@ def main():
         params.model_dir = Path(params.model_dir)
         if not params.model_dir.is_dir():
             raise FileNotFoundError(f"{params.model_dir} does not exist")
-        for filename in [params.checkpoint_name, "model.json", "tokens.txt"]:
-            if not (params.model_dir / filename).is_file():
-                raise FileNotFoundError(f"{params.model_dir / filename} does not exist")
-        model_ckpt = params.model_dir / params.checkpoint_name
+        
+        # Checkpoint can be a filename inside model_dir or an absolute/relative path
+        ckpt_candidate = Path(params.checkpoint_name)
+        if ckpt_candidate.is_file():
+            model_ckpt = ckpt_candidate
+        elif (params.model_dir / params.checkpoint_name).is_file():
+            model_ckpt = params.model_dir / params.checkpoint_name
+        else:
+            raise FileNotFoundError(
+                f"Checkpoint {params.checkpoint_name} not found in {params.model_dir}"
+            )
+
         model_config = params.model_dir / "model.json"
         token_file = params.model_dir / "tokens.txt"
-        logging.info(
-            f"Using {params.model_name} in local model dir {params.model_dir}, "
-            f"checkpoint {params.checkpoint_name}"
-        )
+
+        if not model_config.is_file():
+            raise FileNotFoundError(f"{model_config} does not exist")
+        if not token_file.is_file():
+            raise FileNotFoundError(f"{token_file} does not exist")
+
+        logging.info(f"Loaded checkpoint: {model_ckpt}")
+        logging.info(f"Loaded config: {model_config}")
+        logging.info(f"Loaded tokens file: {token_file}")
+        if "ZipVoice-Model/model.pt" in str(model_ckpt):
+            logging.warning(
+                "Notice: You are using the pretrained base checkpoint from ZipVoice-Model/model.pt! "
+                "Make sure to use your fine-tuned checkpoint (e.g., epoch-13.pt, best-valid-loss.pt, or iter-*-avg-*.pt) "
+                "for trained Vietnamese voice."
+            )
     else:
         logging.info(f"Using pretrained {params.model_name} model from the Huggingface")
         model_ckpt = hf_hub_download(

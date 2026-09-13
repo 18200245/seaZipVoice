@@ -105,7 +105,7 @@ class SEATokenizer(Tokenizer):
             token_ids = []
             for t in tokens:
                 if t not in self.token2id:
-                    logging.debug(f"Skip OOV {t}")
+                    logging.warning(f"[SEATokenizer] Skip OOV token: '{t}' (repr={repr(t)}) - missing from token_file!")
                     continue
                 token_ids.append(self.token2id[t])
             token_ids_list.append(token_ids)
