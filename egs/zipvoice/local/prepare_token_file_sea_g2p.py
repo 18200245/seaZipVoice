@@ -22,7 +22,7 @@ import argparse
 import logging
 from collections import Counter
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from lhotse import load_manifest_lazy
 
@@ -120,6 +120,11 @@ def prepare_tokens(
             for p_str in phoneme_strs:
                 counter.update(p_str)
             batch.clear()
+
+    # Ensure basic punctuation and whitespace are included
+    for sym in [" ", ".", ",", "!", "?", ";", ":"]:
+        if sym not in counter:
+            counter[sym] = 1
 
     unique_tokens = set(counter.keys())
 
