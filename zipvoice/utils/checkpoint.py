@@ -104,6 +104,32 @@ def save_checkpoint(
     torch.save(checkpoint, filename)
 
 
+def _load_state_dict_flexible(model: nn.Module, state_dict: Dict[str, Any], strict: bool = True):
+    """Load state_dict into model with automatic handling for DDP prefixes
+    and adaptation for embedding layer (embed.weight) size mismatch during fine-tuning.
+    """
+    clean_state = {}
+    for k, v in state_dict.items():
+        clean_k = k[7:] if k.startswith("module.") else k
+        clean_state[clean_k] = v
+
+    model_state = model.state_dict()
+    if "embed.weight" in clean_state and "embed.weight" in model_state:
+        ckpt_embed = clean_state["embed.weight"]
+        target_embed = model_state["embed.weight"]
+        if ckpt_embed.shape != target_embed.shape:
+            logging.warning(
+                f"embed.weight size mismatch: checkpoint {ckpt_embed.shape} vs model {target_embed.shape}. "
+                f"Adapting embedding matrix for transfer learning."
+            )
+            new_embed = target_embed.clone()
+            min_vocab = min(ckpt_embed.shape[0], target_embed.shape[0])
+            new_embed[:min_vocab] = ckpt_embed[:min_vocab]
+            clean_state["embed.weight"] = new_embed
+
+    model.load_state_dict(clean_state, strict=strict)
+
+
 def load_checkpoint(
     filename: Path,
     model: Optional[nn.Module] = None,
@@ -115,30 +141,18 @@ def load_checkpoint(
     checkpoint = torch.load(filename, map_location="cpu", weights_only=False)
 
     if model is not None:
-
-        if next(iter(checkpoint["model"])).startswith("module."):
-            logging.debug("Loading checkpoint saved by DDP")
-            dst_state_dict = model.state_dict()
-            src_state_dict = checkpoint["model"]
-            for key in dst_state_dict.keys():
-                src_key = "{}.{}".format("module", key)
-                dst_state_dict[key] = src_state_dict.pop(src_key)
-            assert len(src_state_dict) == 0
-            model.load_state_dict(dst_state_dict, strict=strict)
-        else:
-            logging.debug("Loading checkpoint")
-            model.load_state_dict(checkpoint["model"], strict=strict)
-
+        logging.debug("Loading checkpoint into model")
+        _load_state_dict_flexible(model, checkpoint["model"], strict=strict)
         checkpoint.pop("model")
 
     if model_avg is not None and "model_avg" in checkpoint:
         logging.info("Loading averaged model")
-        model_avg.load_state_dict(checkpoint["model_avg"], strict=strict)
+        _load_state_dict_flexible(model_avg, checkpoint["model_avg"], strict=strict)
         checkpoint.pop("model_avg")
 
     if model_ema is not None and "model_ema" in checkpoint:
         logging.info("Loading ema model")
-        model_ema.load_state_dict(checkpoint["model_ema"], strict=strict)
+        _load_state_dict_flexible(model_ema, checkpoint["model_ema"], strict=strict)
         checkpoint.pop("model_ema")
 
     return checkpoint

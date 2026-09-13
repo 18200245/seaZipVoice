@@ -61,6 +61,13 @@ def get_args():
     )
 
     parser.add_argument(
+        "--base-tokens",
+        type=Path,
+        default=None,
+        help="Optional path to existing base tokens file to extend (e.g., pretrained tokens.txt).",
+    )
+
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=256,
@@ -70,7 +77,13 @@ def get_args():
     return parser.parse_args()
 
 
-def prepare_tokens(manifest_files: List[Path], token_file: Path, lang: str, batch_size: int = 256):
+def prepare_tokens(
+    manifest_files: List[Path],
+    token_file: Path,
+    lang: str,
+    base_tokens_file: Optional[Path] = None,
+    batch_size: int = 256,
+):
     if SEAPipeline is None:
         raise RuntimeError(
             "sea-g2p is not installed. Please install it with:\n"
@@ -110,15 +123,30 @@ def prepare_tokens(manifest_files: List[Path], token_file: Path, lang: str, batc
 
     unique_tokens = set(counter.keys())
 
-    # Ensure padding token '_' is not in unique_tokens so it's placed at index 0
+    # Ensure padding token '_' is not in unique_tokens
     if "_" in unique_tokens:
         unique_tokens.remove("_")
 
-    # Sort tokens by frequency descending
+    # Sort new tokens by frequency descending
     sorted_tokens = sorted(unique_tokens, key=lambda t: counter[t], reverse=True)
 
-    # Pad token is always at index 0
-    all_tokens = ["_"] + sorted_tokens
+    if base_tokens_file is not None and Path(base_tokens_file).is_file():
+        logging.info(f"Extending base tokens from {base_tokens_file}")
+        base_tokens = []
+        with open(base_tokens_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.rstrip("\r\n")
+                if line:
+                    token = line.split("\t")[0]
+                    base_tokens.append(token)
+        base_set = set(base_tokens)
+        new_tokens = [t for t in sorted_tokens if t not in base_set]
+        all_tokens = base_tokens + new_tokens
+        logging.info(
+            f"Base vocab size: {len(base_tokens)}, added {len(new_tokens)} new SEA-G2P tokens -> Total: {len(all_tokens)}"
+        )
+    else:
+        all_tokens = ["_"] + sorted_tokens
 
     token_file.parent.mkdir(parents=True, exist_ok=True)
     logging.info(f"Writing {len(all_tokens)} tokens to {token_file}")
@@ -135,4 +163,10 @@ if __name__ == "__main__":
     logging.basicConfig(format=formatter, level=logging.INFO, force=True)
 
     args = get_args()
-    prepare_tokens(args.manifest, args.tokens, lang=args.lang, batch_size=args.batch_size)
+    prepare_tokens(
+        args.manifest,
+        args.tokens,
+        lang=args.lang,
+        base_tokens_file=args.base_tokens,
+        batch_size=args.batch_size,
+    )
