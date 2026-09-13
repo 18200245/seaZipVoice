@@ -252,6 +252,14 @@ def get_parser():
     )
 
     parser.add_argument(
+        "--save-epoch-interval",
+        type=int,
+        default=1,
+        help="Save epoch checkpoint every N epochs (e.g. 3 or 4). Default: 1 (every epoch). "
+        "The final epoch will always be saved.",
+    )
+
+    parser.add_argument(
         "--valid-by-epoch",
         type=str2bool,
         default=False,
@@ -1084,27 +1092,32 @@ def run(rank, world_size, args):
             diagnostic.print_diagnostics()
             break
 
-        filename = params.exp_dir / f"epoch-{params.cur_epoch}.pt"
-        save_checkpoint(
-            filename=filename,
-            params=params,
-            model=model,
-            model_avg=model_avg,
-            optimizer=optimizer,
-            scheduler=scheduler,
-            sampler=train_dl.sampler,
-            scaler=scaler,
-            rank=rank,
+        should_save_epoch = (
+            (params.cur_epoch % params.save_epoch_interval == 0)
+            or (params.cur_epoch == params.num_epochs)
         )
+        if should_save_epoch:
+            filename = params.exp_dir / f"epoch-{params.cur_epoch}.pt"
+            save_checkpoint(
+                filename=filename,
+                params=params,
+                model=model,
+                model_avg=model_avg,
+                optimizer=optimizer,
+                scheduler=scheduler,
+                sampler=train_dl.sampler,
+                scaler=scaler,
+                rank=rank,
+            )
 
-        if rank == 0:
-            if params.best_train_epoch == params.cur_epoch:
-                best_train_filename = params.exp_dir / "best-train-loss.pt"
-                copyfile(src=filename, dst=best_train_filename)
+            if rank == 0:
+                if params.best_train_epoch == params.cur_epoch:
+                    best_train_filename = params.exp_dir / "best-train-loss.pt"
+                    copyfile(src=filename, dst=best_train_filename)
 
-            if params.best_valid_epoch == params.cur_epoch:
-                best_valid_filename = params.exp_dir / "best-valid-loss.pt"
-                copyfile(src=filename, dst=best_valid_filename)
+                if params.best_valid_epoch == params.cur_epoch:
+                    best_valid_filename = params.exp_dir / "best-valid-loss.pt"
+                    copyfile(src=filename, dst=best_valid_filename)
 
     logging.info("Done!")
 
