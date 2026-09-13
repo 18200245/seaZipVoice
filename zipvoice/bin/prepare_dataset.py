@@ -193,9 +193,13 @@ def prepare_dataset(
     # Step 1: Read all unique recording paths
     recordings_path_set = set()
     supervision_list = list()
-    with open(tsv_path, "r") as fr:
-        for line in fr:
-            items = line.strip().split("\t")
+    seen_supervision_ids = set()
+    with open(tsv_path, "r", encoding="utf-8") as fr:
+        for line_num, line in enumerate(fr, 1):
+            line = line.strip()
+            if not line:
+                continue
+            items = line.split("\t")
             if len(items) == 3:
                 uniq_id, text, wav_path = items
                 start, end = 0, None
@@ -204,9 +208,15 @@ def prepare_dataset(
                 start, end = float(start), float(end)
             else:
                 raise ValueError(
-                    f"Invalid line format: {line},"
-                    "requries to be 3 columns or 5 columns"
+                    f"Invalid line format at line {line_num}: {line},"
+                    "requires to be 3 columns or 5 columns"
                 )
+            if uniq_id in seen_supervision_ids:
+                logging.warning(
+                    f"Line {line_num}: Duplicate uniq_id '{uniq_id}' found in {tsv_path}. Skipping."
+                )
+                continue
+            seen_supervision_ids.add(uniq_id)
             recordings_path_set.add(wav_path)
             supervision_list.append((uniq_id, text, wav_path, start, end))
 
