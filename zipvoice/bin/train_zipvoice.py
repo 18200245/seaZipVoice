@@ -68,6 +68,7 @@ from zipvoice.tokenizer.sea_g2p_tokenizer import SEATokenizer
 from zipvoice.utils.checkpoint import (
     load_checkpoint,
     remove_checkpoints,
+    remove_epoch_checkpoints,
     resume_checkpoint,
     save_checkpoint,
     save_checkpoint_with_global_batch_idx,
@@ -276,6 +277,20 @@ def get_parser():
         For instance, if it is 3, there are only 3 checkpoints
         in the exp-dir with filenames `checkpoint-xxx.pt`.
         It does not affect checkpoints with name `epoch-xxx.pt`.
+        """,
+    )
+
+    parser.add_argument(
+        "--max-epoch-save",
+        "--keep-last-k-epochs",
+        type=int,
+        default=0,
+        dest="max_epoch_save",
+        help="""Maximum number of recent epoch checkpoints to keep on disk.
+        If > 0, older epoch checkpoints (epoch-*.pt) will be removed,
+        keeping only the latest `max_epoch_save` ones.
+        Default is 0 (keep all saved epoch checkpoints).
+        Note: `best-train-loss.pt` and `best-valid-loss.pt` are never removed.
         """,
     )
 
@@ -1118,6 +1133,13 @@ def run(rank, world_size, args):
                 if params.best_valid_epoch == params.cur_epoch:
                     best_valid_filename = params.exp_dir / "best-valid-loss.pt"
                     copyfile(src=filename, dst=best_valid_filename)
+
+                if params.max_epoch_save > 0:
+                    remove_epoch_checkpoints(
+                        out_dir=params.exp_dir,
+                        topk=params.max_epoch_save,
+                        rank=rank,
+                    )
 
     logging.info("Done!")
 

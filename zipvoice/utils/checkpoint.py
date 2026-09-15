@@ -425,6 +425,67 @@ def remove_checkpoints(
         os.remove(c)
 
 
+def find_epoch_checkpoints(out_dir: Path) -> List[str]:
+    """Find all available epoch checkpoints in a directory.
+
+    The checkpoint filenames have the form: `epoch-xxx.pt`
+    where xxx is a numerical value representing the epoch number.
+    Note: This excludes averaged checkpoints like `epoch-12-avg-3.pt`.
+
+    Returns:
+        Return a list of checkpoint filenames, sorted in descending
+        order by epoch number (e.g. [epoch-13.pt, epoch-12.pt, ...]).
+    """
+    checkpoints = list(glob.glob(f"{out_dir}/epoch-[0-9]*.pt"))
+    pattern = re.compile(r"^epoch-([0-9]+)\.pt$")
+    epoch_checkpoints = []
+    for c in checkpoints:
+        basename = os.path.basename(c)
+        result = pattern.match(basename)
+        if not result:
+            continue
+        epoch_checkpoints.append((int(result.group(1)), c))
+
+    epoch_checkpoints = sorted(epoch_checkpoints, reverse=True, key=lambda x: x[0])
+    return [c[1] for c in epoch_checkpoints]
+
+
+def remove_epoch_checkpoints(
+    out_dir: Path,
+    topk: int,
+    rank: int = 0,
+):
+    """Remove older epoch checkpoints from the given directory,
+    keeping only the `topk` newest epoch checkpoints.
+
+    Args:
+        out_dir:
+            The directory containing epoch checkpoints.
+        topk:
+            Number of newest epoch checkpoints to keep.
+            If topk <= 0, no checkpoints are removed.
+        rank:
+            If using DDP for training, rank of the current node (only rank 0 deletes).
+    """
+    if topk <= 0 or rank != 0:
+        return
+
+    checkpoints = find_epoch_checkpoints(out_dir)
+    if len(checkpoints) <= topk:
+        return
+
+    to_remove = checkpoints[topk:]
+    for c in to_remove:
+        logging.info(
+            f"Removing old epoch checkpoint {c} (keeping newest {topk} epochs)"
+        )
+        try:
+            os.remove(c)
+        except OSError as e:
+            logging.warning(f"Failed to remove old epoch checkpoint {c}: {e}")
+
+
+
 def resume_checkpoint(
     params: AttributeDict,
     model: nn.Module,
