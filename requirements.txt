@@ -19,4 +19,5 @@ jieba
 piper_phonemize
 pypinyin
 sea-g2p
+vig2p
 setuptools<81

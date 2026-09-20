@@ -8,6 +8,7 @@ from zipvoice.tokenizer.tokenizer import (
     add_tokens,
 )
 from zipvoice.tokenizer.sea_g2p_tokenizer import SEATokenizer
+from zipvoice.tokenizer.vig2p_tokenizer import ViG2PTokenizer
 
 __all__ = [
     "Tokenizer",
@@ -17,5 +18,6 @@ __all__ = [
     "DialogTokenizer",
     "LibriTTSTokenizer",
     "SEATokenizer",
+    "ViG2PTokenizer",
     "add_tokens",
 ]

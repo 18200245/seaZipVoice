@@ -85,6 +85,7 @@ from zipvoice.tokenizer.tokenizer import (
     SimpleTokenizer,
 )
 from zipvoice.tokenizer.sea_g2p_tokenizer import SEATokenizer
+from zipvoice.tokenizer.vig2p_tokenizer import ViG2PTokenizer
 from zipvoice.utils.checkpoint import load_checkpoint
 from zipvoice.utils.common import AttributeDict, str2bool
 from zipvoice.utils.feature import VocosFbank
@@ -147,7 +148,7 @@ def get_parser():
         "--tokenizer",
         type=str,
         default="emilia",
-        choices=["emilia", "libritts", "espeak", "simple", "sea_g2p"],
+        choices=["emilia", "libritts", "espeak", "simple", "sea_g2p", "vig2p"],
         help="Tokenizer type.",
     )
 
@@ -380,8 +381,9 @@ def generate_sentence_raw_evaluation(
     # Convert text to tokens
     tokens_str = tokenizer.texts_to_tokens([text])[0]
     prompt_tokens_str = tokenizer.texts_to_tokens([prompt_text])[0]
-    logging.info(f"[SEA-G2P] Prompt phonemes: {''.join(prompt_tokens_str)}")
-    logging.info(f"[SEA-G2P] Target phonemes: {''.join(tokens_str)}")
+    tag = "viG2P" if "ViG2PTokenizer" in type(tokenizer).__name__ else ("SEA-G2P" if "SEATokenizer" in type(tokenizer).__name__ else "Phonemes")
+    logging.info(f"[{tag}] Prompt phonemes: {''.join(prompt_tokens_str)}")
+    logging.info(f"[{tag}] Target phonemes: {''.join(tokens_str)}")
 
     tokens = tokenizer.tokens_to_token_ids([tokens_str])
     prompt_tokens = tokenizer.tokens_to_token_ids([prompt_tokens_str])
@@ -538,18 +540,19 @@ def generate_sentence(
     tokens_str = tokenizer.texts_to_tokens([text])[0]
     prompt_tokens_str = tokenizer.texts_to_tokens([prompt_text])[0]
 
-    # In ra dòng phiên âm qua SEA-G2P
+    # In ra dòng phiên âm qua G2P
+    tag = "viG2P" if "ViG2PTokenizer" in type(tokenizer).__name__ else ("SEA-G2P" if "SEATokenizer" in type(tokenizer).__name__ else "Phonemes")
     print("=" * 60)
-    print(f"[SEA-G2P] Prompt Text:     {prompt_text}")
-    print(f"[SEA-G2P] Prompt Phonemes: {''.join(prompt_tokens_str)}")
-    print(f"[SEA-G2P] Target Text:     {text}")
-    print(f"[SEA-G2P] Target Phonemes: {''.join(tokens_str)}")
+    print(f"[{tag}] Prompt Text:     {prompt_text}")
+    print(f"[{tag}] Prompt Phonemes: {''.join(prompt_tokens_str)}")
+    print(f"[{tag}] Target Text:     {text}")
+    print(f"[{tag}] Target Phonemes: {''.join(tokens_str)}")
     print("=" * 60)
 
-    logging.info(f"[SEA-G2P] Prompt text: {prompt_text}")
-    logging.info(f"[SEA-G2P] Prompt phonemes: {''.join(prompt_tokens_str)}")
-    logging.info(f"[SEA-G2P] Target text: {text}")
-    logging.info(f"[SEA-G2P] Target phonemes: {''.join(tokens_str)}")
+    logging.info(f"[{tag}] Prompt text: {prompt_text}")
+    logging.info(f"[{tag}] Prompt phonemes: {''.join(prompt_tokens_str)}")
+    logging.info(f"[{tag}] Target text: {text}")
+    logging.info(f"[{tag}] Target phonemes: {''.join(tokens_str)}")
 
     # Check for OOV tokens
     prompt_oov = [t for t in prompt_tokens_str if t not in tokenizer.token2id]
@@ -835,6 +838,8 @@ def main():
         tokenizer = EspeakTokenizer(token_file=token_file, lang=params.lang)
     elif params.tokenizer == "sea_g2p":
         tokenizer = SEATokenizer(token_file=token_file, lang=params.lang)
+    elif params.tokenizer == "vig2p":
+        tokenizer = ViG2PTokenizer(token_file=token_file, lang=params.lang)
     else:
         assert params.tokenizer == "simple"
         tokenizer = SimpleTokenizer(token_file=token_file)

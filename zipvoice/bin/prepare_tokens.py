@@ -38,7 +38,7 @@ def get_args():
         "--tokenizer",
         type=str,
         default="emilia",
-        choices=["emilia", "espeak", "dialog", "libritts", "simple", "sea_g2p"],
+        choices=["emilia", "espeak", "dialog", "libritts", "simple", "sea_g2p", "vig2p"],
         help="The tokenizer to use for preparing tokens.",
     )
 
@@ -46,8 +46,8 @@ def get_args():
         "--lang",
         type=str,
         default="en-us",
-        help="Language identifier, used when tokenizer type is espeak or sea_g2p "
-        "(e.g. 'vi', 'th', 'id' for sea_g2p).",
+        help="Language identifier, used when tokenizer type is espeak, sea_g2p, or vig2p "
+        "(e.g. 'vi', 'th', 'id' for sea_g2p, 'vi' for vig2p).",
     )
 
     return parser.parse_args()

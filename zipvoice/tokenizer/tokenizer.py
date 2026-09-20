@@ -625,6 +625,9 @@ def add_tokens(cut_set: CutSet, tokenizer: str, lang: str):
     elif tokenizer == "sea_g2p":
         from zipvoice.tokenizer.sea_g2p_tokenizer import SEATokenizer
         tokenizer = SEATokenizer(lang=lang)
+    elif tokenizer == "vig2p":
+        from zipvoice.tokenizer.vig2p_tokenizer import ViG2PTokenizer
+        tokenizer = ViG2PTokenizer(lang=lang)
     else:
         raise ValueError(f"Unsupported tokenizer: {tokenizer}.")
 
