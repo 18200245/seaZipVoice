@@ -95,6 +95,7 @@ from zipvoice.tokenizer.tokenizer import (
 from zipvoice.utils.checkpoint import (
     load_checkpoint,
     remove_checkpoints,
+    remove_epoch_checkpoints,
     resume_checkpoint,
     save_checkpoint,
     save_checkpoint_with_global_batch_idx,
@@ -251,6 +252,28 @@ def get_parser():
         For instance, if it is 3, there are only 3 checkpoints
         in the exp-dir with filenames `checkpoint-xxx.pt`.
         It does not affect checkpoints with name `epoch-xxx.pt`.
+        """,
+    )
+
+    parser.add_argument(
+        "--save-epoch-interval",
+        type=int,
+        default=1,
+        help="Save epoch checkpoint every N epochs (e.g. 3 or 4). Default: 1 (every epoch). "
+        "The final epoch will always be saved.",
+    )
+
+    parser.add_argument(
+        "--max-epoch-save",
+        "--keep-last-k-epochs",
+        type=int,
+        default=0,
+        dest="max_epoch_save",
+        help="""Maximum number of recent epoch checkpoints to keep on disk.
+        If > 0, older epoch checkpoints (epoch-*.pt) will be removed,
+        keeping only the latest `max_epoch_save` ones.
+        Default is 0 (keep all saved epoch checkpoints).
+        Note: `best-train-loss.pt` and `best-valid-loss.pt` are never removed.
         """,
     )
 
@@ -1108,28 +1131,40 @@ def run(rank, world_size, args):
             diagnostic.print_diagnostics()
             break
 
-        filename = params.exp_dir / f"epoch-{params.cur_epoch}.pt"
-        save_checkpoint(
-            filename=filename,
-            params=params,
-            model=model,
-            model_avg=model_avg,
-            model_ema=teacher_model,
-            optimizer=optimizer,
-            scheduler=scheduler,
-            sampler=train_dl.sampler,
-            scaler=scaler,
-            rank=rank,
+        should_save_epoch = (
+            (params.cur_epoch % params.save_epoch_interval == 0)
+            or (params.cur_epoch == params.num_epochs)
         )
+        if should_save_epoch:
+            filename = params.exp_dir / f"epoch-{params.cur_epoch}.pt"
+            save_checkpoint(
+                filename=filename,
+                params=params,
+                model=model,
+                model_avg=model_avg,
+                model_ema=teacher_model,
+                optimizer=optimizer,
+                scheduler=scheduler,
+                sampler=train_dl.sampler,
+                scaler=scaler,
+                rank=rank,
+            )
 
-        if rank == 0:
-            if params.best_train_epoch == params.cur_epoch:
-                best_train_filename = params.exp_dir / "best-train-loss.pt"
-                copyfile(src=filename, dst=best_train_filename)
+            if rank == 0:
+                if params.best_train_epoch == params.cur_epoch:
+                    best_train_filename = params.exp_dir / "best-train-loss.pt"
+                    copyfile(src=filename, dst=best_train_filename)
 
-            if params.best_valid_epoch == params.cur_epoch:
-                best_valid_filename = params.exp_dir / "best-valid-loss.pt"
-                copyfile(src=filename, dst=best_valid_filename)
+                if params.best_valid_epoch == params.cur_epoch:
+                    best_valid_filename = params.exp_dir / "best-valid-loss.pt"
+                    copyfile(src=filename, dst=best_valid_filename)
+
+                if params.max_epoch_save > 0:
+                    remove_epoch_checkpoints(
+                        out_dir=params.exp_dir,
+                        topk=params.max_epoch_save,
+                        rank=rank,
+                    )
 
     logging.info("Done!")
 
