@@ -92,6 +92,8 @@ from zipvoice.tokenizer.tokenizer import (
     LibriTTSTokenizer,
     SimpleTokenizer,
 )
+from zipvoice.tokenizer.sea_g2p_tokenizer import SEATokenizer
+from zipvoice.tokenizer.vig2p_tokenizer import ViG2PTokenizer
 from zipvoice.utils.checkpoint import (
     load_checkpoint,
     remove_checkpoints,
@@ -362,7 +364,7 @@ def get_parser():
         "--tokenizer",
         type=str,
         default="emilia",
-        choices=["emilia", "libritts", "espeak", "simple"],
+        choices=["emilia", "libritts", "espeak", "simple", "sea_g2p", "vig2p"],
         help="Tokenizer type.",
     )
 
@@ -370,7 +372,7 @@ def get_parser():
         "--lang",
         type=str,
         default="en-us",
-        help="Language identifier, used when tokenizer type is espeak. see"
+        help="Language identifier, used when tokenizer type is espeak, sea_g2p, or vig2p. see"
         "https://github.com/rhasspy/espeak-ng/blob/master/docs/languages.md",
     )
 
@@ -920,6 +922,10 @@ def run(rank, world_size, args):
         tokenizer = LibriTTSTokenizer(token_file=params.token_file)
     elif params.tokenizer == "espeak":
         tokenizer = EspeakTokenizer(token_file=params.token_file, lang=params.lang)
+    elif params.tokenizer == "sea_g2p":
+        tokenizer = SEATokenizer(token_file=params.token_file, lang=params.lang)
+    elif params.tokenizer == "vig2p":
+        tokenizer = ViG2PTokenizer(token_file=params.token_file, lang=params.lang)
     else:
         assert params.tokenizer == "simple"
         tokenizer = SimpleTokenizer(token_file=params.token_file)
@@ -1071,7 +1077,7 @@ def run(rank, world_size, args):
         # To avoid OOM issues due to too long dev cuts
         dev_cuts = dev_cuts.filter(_remove_short_and_long_utt)
 
-    if params.tokenizer in ["emilia", "espeak", "dialog"]:
+    if params.tokenizer in ["emilia", "espeak", "dialog", "sea_g2p", "vig2p"]:
         if not hasattr(train_cuts[0].supervisions[0], "tokens") or not hasattr(
             dev_cuts[0].supervisions[0], "tokens"
         ):
